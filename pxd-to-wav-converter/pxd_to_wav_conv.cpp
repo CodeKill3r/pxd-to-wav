@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
-/*	
+/*
 --------------------------------
 		PXD-TO-WAV Converter
 --------------------------------
@@ -13,6 +13,7 @@
 		@HobbyCoder (http://www.buha.info/member.php?61860-HobbyCoder) (rev-engineering, basic code)
 		@AttarSoftware (http://rdsrc.us/S1Bnwu) (Raw2Wav)
 		@Burnett01	(https://github.com/Burnett01/) (removed unecessary stuff, combined raw2wav/converter, getExt fn)
+		@CodeKiller (https://github.com/CodeKill3r/) (printout cleanup, delete TMP after successful conversion)
 
 	Based on:
 					(http://reversing.be/forum/viewtopic.php?p=3463&sid=55b23b02f5fc369f2f28c5b640bcead0)
@@ -54,11 +55,11 @@ int main()
 {
 	GetCurrentDirectory( nCurdirlen, sCurdir );
 	printf( "CURDIR: %s\n", sCurdir );
-	
+
 	HMODULE hinstLib = LoadLibrary( "pxd32d5_d4.dll" );
 	if( hinstLib == NULL )
 	{
-		printf( "Library couldn't be linked!\n" );
+		printf( "Library pxd32d5_d4.dll couldn't be loaded!\n" );
 		Sleep( 1000 );
 		goto doExit;
 	}
@@ -70,7 +71,7 @@ int main()
 	PInit();
 
 	readDirectoryAndConvert(".");
-	
+
 	PClose();
 
 	FreeLibrary( hinstLib );
@@ -133,7 +134,7 @@ int convertSingleFile( char *pathPXD )
 	int pxdLen = strlen( pathPXD );
 	int extLen = pxdLen + 4; // 4 = [.xyz]
 	int finLen = nCurdirlen + extLen;
-	
+
 	char *PXD = (char *)malloc( (finLen + 1) * sizeof( char ) );  // 1 = \0
 	if( !PXD ) return 0;
 
@@ -153,18 +154,19 @@ int convertSingleFile( char *pathPXD )
 	WAV[finLen] = '\0';
 
 	printf("PXD IS: %s\n", PXD);
-	printf("TMP IS: %s\n", TMP);
-	printf("WAV IS: %s\n", WAV);
 
-	printf( "Creating & Converting TMP-File (RAW) to (WAV)...\n" );
+	printf( "Creating TMP-File (RAW)...\n" );
 
 	DWORD conv = 3;
-	memcpy((void*)0x10096cd8, &conv, 4);
-	RWavToTemp(PXD, TMP, 0, NULL, 0, 0, 0);
+	memcpy((void*)0x10096cd8, &conv, 4);        //DLL magic?
+	RWavToTemp(PXD, TMP, 0, NULL, 0, 0, 0);     //DLL call
+
+	printf( "Converting TMP-File (RAW) to (WAV)...\n" );
+
 	Raw2Wav( TMP, WAV, 44100 );
 
 	Sleep( 2000 );
-	printf( "WAV-File was successfully created.\n" );
+	printf( "WAV-File %s was successfully created.\n", WAV );
 
 	if( PXD ) free( PXD );
 	if( TMP ) free( TMP );
@@ -175,7 +177,7 @@ int convertSingleFile( char *pathPXD )
 
 int Raw2Wav(const char *rawfn, const char *wavfn, long frequency)
 {
-	struct _stat sb; 
+	struct _stat sb;
 	if (!_stat(rawfn, &sb))            // OK
 	{
 		long samplecount = sb.st_size / 2;
@@ -186,13 +188,14 @@ int Raw2Wav(const char *rawfn, const char *wavfn, long frequency)
 		FILE *wav = fopen(wavfn, "wb");
 		if (!wav)
 		{
-			fclose(raw); return -3;
+			fclose(raw);
+			return -3;
 		}
 		fwrite("RIFF", 1, 4, wav);
 		fwrite(&riffsize, 4, 1, wav);
 		fwrite("WAVEfmt ", 1, 8, wav);
 		fwrite(&chunksize, 4, 1, wav);
-		fmt.wFormatTag = 1;      // PCM 
+		fmt.wFormatTag = 1;      // PCM
 		fmt.wChannels = 1;      // MONO
 		fmt.dwSamplesPerSec = frequency * 1;
 		fmt.dwAvgBytesPerSec = frequency * 1 * 2;      // PCM 16 bits
@@ -210,6 +213,13 @@ int Raw2Wav(const char *rawfn, const char *wavfn, long frequency)
 		}
 		fclose(raw);
 		fclose(wav);
+		if( remove( rawfn ) != 0 )
+		{
+            printf("Error deleting file\n");
+            return -5;
+		}
+        else
+             printf("Temp file %s successfully deleted\n",rawfn);
 	}
 	else      // File not found?
 	{
@@ -228,4 +238,4 @@ const char *getExt( const char *name )
   }
 
   return end + 1;
-}
+} 
